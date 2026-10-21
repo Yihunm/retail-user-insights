@@ -1,0 +1,48 @@
+import numpy as np
+import pandas as pd
+import pytest
+
+customers = pytest.importorskip('retail_insights.customers', reason='后续客户分析模块的测试草稿，当前仅验证数据模块')
+build_rfm = customers.build_rfm
+cluster_customers = customers.cluster_customers
+
+
+def sample_sales():
+    return pd.DataFrame({'CustomerID': ['a', 'a', 'b', None, 'a'], 'InvoiceNo': ['1', '2', '3', '4', '5'], 'InvoiceDate': pd.to_datetime(['2011-01-01', '2011-01-09', '2011-01-08', '2011-01-10', '2011-02-01']), 'Amount': [10., 20., 30., 90., 50.], 'Quantity': [1, 2, 3, 4, 5]})
+
+
+def test_rfm_cutoff_window_and_equal_value_scores():
+    rfm = build_rfm(sample_sales(), reference_date='2011-01-10', window_days=5).set_index('CustomerID')
+    assert set(rfm.index) == {'a', 'b'}
+    assert rfm.loc['a', 'Recency'] == 1
+    assert rfm.loc['a', 'Monetary'] == 20
+    assert rfm.loc['a', 'Frequency'] == rfm.loc['b', 'Frequency'] == 1
+    assert rfm.loc['a', 'FScore'] == rfm.loc['b', 'FScore']
+    assert rfm[['RScore', 'FScore', 'MScore']].ge(1).all().all()
+    assert rfm[['RScore', 'FScore', 'MScore']].le(5).all().all()
+
+
+def test_rfm_default_reference_and_order_frequency():
+    rfm = build_rfm(sample_sales()).set_index('CustomerID')
+    assert rfm.loc['a', 'Recency'] == 1
+    assert rfm.loc['a', 'Frequency'] == 3
+    assert rfm.loc['a', 'AverageOrderValue'] == pytest.approx(80/3)
+
+
+def test_clusters_reproducible_use_all_customers_and_raw_profiles():
+    rfm = pd.DataFrame({'CustomerID': [str(i) for i in range(12)], 'Recency': np.arange(1, 13), 'Frequency': [1, 2, 3, 4]*3, 'Monetary': np.arange(1, 13)*10., 'Quantity': np.arange(1, 13)*2., 'AverageOrderValue': np.arange(1, 13)*5.})
+    result = cluster_customers(rfm, k=3)
+    again = cluster_customers(rfm, k=3)
+    assert len(result['customers']) == len(rfm)
+    assert result['customers'].Cluster.tolist() == again['customers'].Cluster.tolist()
+    assert result['profile'].Count.sum() == 12
+    assert result['scores']['k'].tolist() == list(range(2, 9))
+    assert np.isfinite(result['customers'][['PC1', 'PC2']]).all().all()
+    assert 'model' in result
+
+
+def test_clustering_reports_tiny_or_constant_inputs():
+    with pytest.raises(ValueError):
+        cluster_customers(pd.DataFrame({'Recency': [1], 'Frequency': [1], 'Monetary': [1]}))
+    with pytest.raises(ValueError, match='差异|variance|相同'):
+        cluster_customers(pd.DataFrame({'Recency': [1]*5, 'Frequency': [1]*5, 'Monetary': [1]*5}), k=2)

@@ -1,0 +1,92 @@
+import json
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from retail_insights import prediction as p
+
+
+def sales(rows):
+    frame = pd.DataFrame(rows, columns=['CustomerID', 'InvoiceNo', 'InvoiceDate', 'Quantity', 'UnitPrice'])
+    frame['InvoiceDate'] = pd.to_datetime(frame['InvoiceDate'])
+    frame['StockCode'] = 'SKU'
+    frame['Amount'] = frame.Quantity * frame.UnitPrice
+    return frame
+
+
+def test_features_respect_window_order_grain_and_future_invariance():
+    data = sales([
+        ('A','1','2011-01-01',1,10), ('A','2','2011-03-30',2,10),
+        ('A','2','2011-03-30',3,10), ('A','3','2011-04-01',100,10),
+        ('B','4','2011-03-31',1,7), (None,'5','2011-03-31',1,7),
+    ])
+    features = p.feature_frame(data, '2011-04-01').set_index('CustomerID')
+    assert list(features.columns) == p.FEATURES
+    assert set(features.index) == {'A', 'B'}
+    assert features.loc['A','orders_7'] == 1
+    assert features.loc['A','revenue_7'] == 50
+    assert features.loc['A','orders_90'] == 2
+    assert features.loc['B','interval_missing'] == 1
+    assert np.isnan(features.loc['B','interval_mean'])
+    changed = data.copy()
+    changed.loc[changed.InvoiceDate >= '2011-04-01', 'Amount'] = 999999
+    pd.testing.assert_frame_equal(p.feature_frame(data,'2011-04-01'), p.feature_frame(changed,'2011-04-01'))
+
+
+def test_labels_are_half_open_and_incomplete_coverage_rejected():
+    data = sales([
+        ('A','1','2011-01-01',1,1), ('A','2','2011-03-01',1,1),
+        ('B','3','2011-03-01',1,1), ('A','4','2011-04-01',1,1),
+        ('B','5','2011-05-01',1,1), ('Z','6','2011-07-01 12:00',1,1),
+    ])
+    samples = p.make_samples(data, ['2011-04-01'], coverage_end='2011-07-01')
+    labels = samples.set_index('CustomerID').Target
+    assert labels['A'] == 1
+    assert labels['B'] == 0
+    churn = p.make_samples(data,['2011-04-01'], task='churn',coverage_end='2011-07-01')
+    assert churn.set_index('CustomerID').Target['B'] == 0
+    with pytest.raises(ValueError, match='coverage|覆盖'):
+        p.make_samples(data,['2011-06-20'])
+    with pytest.raises(ValueError, match='history|历史'):
+        p.make_samples(data,['2011-02-01'])
+
+
+def sample_table():
+    rows = []
+    for cutoff in p.DEFAULT_CUTOFFS:
+        for i in range(12):
+            row = {'CustomerID':str(i), 'Cutoff':pd.Timestamp(cutoff), 'Target': int(i % 3 == 0)}
+            row.update({name: float(i + 1) for name in p.FEATURES})
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def test_experiment_evaluates_all_strategies_and_roundtrips(tmp_path):
+    result = p.train_experiment(sample_table(),'purchase',tmp_path)
+    metrics = result['metrics']
+    val = metrics[metrics.Split == 'validation']
+    assert len(val) == 16
+    assert set(val.Strategy) == {'none','under','over','smote','weight','baseline'}
+    assert len(metrics[metrics.Split == 'test']) == 1
+    assert 'AveragePrecision' in metrics
+    model, metadata = p.read_artifact(tmp_path)
+    assert metadata['features'] == p.FEATURES
+    assert metadata['probabilities_calibrated'] is False
+    assert metadata['refit_after_selection'] is False
+    assert metadata['threshold'] == result['threshold']
+    expected = model.predict_proba(sample_table()[p.FEATURES])[:,1]
+    loaded, _ = p.read_artifact(tmp_path)
+    np.testing.assert_allclose(expected, loaded.predict_proba(sample_table()[p.FEATURES])[:,1])
+    assert len(pd.read_parquet(tmp_path/'predictions.parquet')) == 12
+    metadata['features'] = ['unexpected']
+    (tmp_path/'metadata.json').write_text(json.dumps(metadata), encoding='utf-8')
+    with pytest.raises(ValueError, match='schema|特征'):
+        p.read_artifact(tmp_path)
+
+
+def test_one_class_training_rejected(tmp_path):
+    samples = sample_table()
+    samples['Target'] = 1
+    with pytest.raises(ValueError,match='two classes|两'):
+        p.train_experiment(samples,'purchase',tmp_path)

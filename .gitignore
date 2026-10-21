@@ -9,3 +9,9 @@ artifacts/
 *.sqlite3
 .streamlit/secrets.toml
 *.log
+
+# Local planning notes
+findings.md
+task_plan.md
+taskplan.md
+progress.md

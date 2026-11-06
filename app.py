@@ -10,14 +10,13 @@ from retail_insights.ui_sales import render as render_sales  # noqa: E402
 from retail_insights.ui_rfm import render as render_rfm  # noqa: E402
 from retail_insights.ui_clustering import render as render_clustering  # noqa: E402
 from retail_insights.ui_prediction import render as render_prediction  # noqa: E402
+from retail_insights.ui_home import render as render_home  # noqa: E402
+from retail_insights.ui_shared import shell  # noqa: E402
 
-st.set_page_config(page_title='Retail Insights · 用户分析', layout='wide')
+st.set_page_config(page_title='Retail Insights · 客户经营', layout='wide')
 root = Path(os.environ.get('RETAIL_DATA_ROOT', PROJECT_ROOT)).resolve()
-st.sidebar.title('Retail Insights')
-st.sidebar.caption('电商用户行为分析系统')
-pages = {'数据导入与清洗': render_data, '交易统计与可视化': render_sales,
-         'RFM用户价值分析': render_rfm, '用户聚类分析': render_clustering, '复购与流失预测': render_prediction}
-selected = st.sidebar.radio('功能模块', list(pages), key='module')
-st.sidebar.divider()
-st.sidebar.caption('历史交易数据 · GBP · 本地演示')
+pages = {'工作台': render_home, '经营分析': render_sales, '客户价值': render_rfm,
+         '客户分群': render_clustering, '复购与流失': render_prediction, '数据管理': render_data,
+         '模型实验': lambda root: render_prediction(root, mode='experiments')}
+selected = shell(root)
 pages[selected](root)

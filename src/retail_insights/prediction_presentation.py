@@ -141,11 +141,12 @@ def load_experiment(folder, dataset_id):
     return result, {**metadata, 'artifact_dir': str(folder)}
 
 
-def export_customer_predictions(selected, context, customer_search=''):
+def export_customer_predictions(selected, context, customer_search='', result_filter='全部客户'):
     description = {'任务': TASK_LABELS[context['task']], '训练编号': context['run_id'],
                    '数据版本': context['dataset_id'], '判定阈值': context['threshold'],
                    '未来观察天数': context['horizon_days'], '模型可用日期': context['available_from'],
                    '已校准': context['probabilities_calibrated'], '客户编号搜索': customer_search,
+                   '预测结果筛选': result_filter,
                    '导出客户数': len(selected), '说明': '预测分数未校准，不代表精确发生概率。'
                    '数据末尾之后的未来结果尚不可验证；未购买不代表永久流失。'}
     content = io.BytesIO()

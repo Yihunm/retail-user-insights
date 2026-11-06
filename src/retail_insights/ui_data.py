@@ -8,11 +8,11 @@ import pandas as pd
 import streamlit as st
 
 from .preparation import load_dataset, prepare_file
+from .ui_shared import page_header, go
 
 
 def render(root):
-    st.title('数据导入与质量检查')
-    st.caption('Online Retail · 历史交易数据 · 金额单位 GBP（英镑）')
+    page_header('工作空间设置', '数据管理', '导入交易文件，检查哪些记录可用于分析。原始文件会保留，异常记录可单独核查。')
 
     with st.expander('导入数据', expanded=not (root / 'data' / 'active.json').exists()):
         mode = st.radio('数据来源', ['选择文件', '本机文件路径'], horizontal=True)
@@ -66,17 +66,15 @@ def render(root):
 
     report = dataset['report']
     metadata = dataset['metadata']
-    st.caption(f"数据版本 {metadata['dataset_id'][:12]} · 来源 {metadata['source_name']}")
+    st.caption(f"当前来源：{metadata['source_name']} · 金额单位：英镑（GBP）")
     metrics = st.columns(4)
     for box, title, key in zip(metrics, ['原始明细', '有效销售', '取消 / 退货候选', '隔离记录'],
                                ['raw_rows', 'sales_rows', 'return_rows', 'quarantine_rows']):
         box.metric(title, f'{report[key]:,}')
 
     if report['partition_verified']:
-        st.success('行数核对通过：'
-                   f"{report['raw_rows']:,} = 重复移除 {report['duplicate_rows']:,} + "
-                   f"销售 {report['sales_rows']:,} + 取消/退货候选 {report['return_rows']:,} + "
-                   f"隔离 {report['quarantine_rows']:,}")
+        st.success('数据已就绪，行数核对通过。有效销售可用于经营分析；客户分析会自动排除无法识别客户的交易。')
+        st.button('返回经营工作台', key='data_home', type='primary', on_click=go, args=('工作台',))
     else:
         st.error('行数核对未通过，请停止后续分析并检查清洗结果。')
 
@@ -114,6 +112,10 @@ def render(root):
                     st.download_button('下载隔离记录 CSV', dataset[key].to_csv(index=False).encode('utf-8-sig'),
                                        file_name='quarantine.csv', mime='text/csv')
     with rules_tab:
+        st.caption(f"数据版本 {metadata['dataset_id'][:12]}")
+        st.write(f"行数核对：{report['raw_rows']:,} = 重复移除 {report['duplicate_rows']:,} + "
+                 f"销售 {report['sales_rows']:,} + 取消/退货候选 {report['return_rows']:,} + "
+                 f"隔离 {report['quarantine_rows']:,}")
         st.markdown('''
     - 有效销售：正数量、正单价、有效时间与编号，且不属于取消或特殊业务编码。
     - 取消/退货候选：负数量、正单价且其他字段有效；不声称已匹配到原始订单。

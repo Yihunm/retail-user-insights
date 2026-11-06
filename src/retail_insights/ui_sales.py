@@ -8,6 +8,7 @@ import streamlit as st
 from .analytics import filter_transactions, sales_summary, sales_tables
 from .preparation import load_dataset
 from .sales_presentation import display_table, country_name, export_analysis, WEEKDAYS
+from .ui_shared import page_header, import_guidance, chart as render_chart
 
 
 @st.cache_data(show_spinner=False, max_entries=2)
@@ -77,15 +78,14 @@ def _chart(figure):
     figure.update_layout(font={'family': 'Microsoft YaHei, PingFang SC, sans-serif'},
                          hoverlabel={'font': {'family': 'Microsoft YaHei, PingFang SC, sans-serif'}})
     figure.update_yaxes(tickformat=',.0f', hoverformat=',.2f')
-    st.plotly_chart(figure, width='stretch', config={'displayModeBar': False})
+    render_chart(figure)
 
 
 def render(root):
-    st.title('交易统计与可视化')
-    st.caption('以有效商品销售为统计口径；取消/退货候选独立展示。')
+    page_header('经营分析', '销售与交易', '查看销售表现、热销商品和购买时段。调整日期和国家或地区，所有图表与导出同步更新。')
     pointer = root / 'data' / 'active.json'
     if not pointer.exists():
-        st.info('请先在“数据导入与清洗”中导入数据。')
+        import_guidance()
         return
     try:
         data = _dataset(str(root), pointer.read_text(encoding='utf-8'))
@@ -96,7 +96,6 @@ def render(root):
     if sales.empty:
         st.info('当前数据没有有效商品销售，无法生成交易看板。')
         return
-    st.caption(f"数据版本 {data['metadata']['dataset_id'][:12]}")
     dates = pd.concat([sales.InvoiceDate, returns.InvoiceDate]).dropna()
     country_options = sorted(set(sales.Country) | set(returns.Country))
     lo, hi = dates.min().date(), dates.max().date()
@@ -126,6 +125,7 @@ def render(root):
         st.caption(f'同范围取消/退货候选 {len(canceled):,} 条，带符号金额 £{refund:,.2f}。')
         return
     stats, tables = sales_summary(filtered), sales_tables(filtered)
+    st.caption(f'当前范围 {start} — {end} · {len(countries)} 个国家或地区 · 有效商品销售')
     metric_boxes = st.columns(3) + st.columns(3)
     for box, title, value in zip(metric_boxes,
                                 ['商品销售额', '销售订单', '可识别客户', '平均订单金额', '复购客户占比', '售出件数'],
@@ -138,6 +138,9 @@ def render(root):
     st.caption(f'同范围取消/退货候选 {len(canceled):,} 条，带符号金额 £{refund:,.2f}。'
                '复购占比仅使用有客户编号的买家，统计期内至少两单视为复购。')
     shown = {name: display_table(frame) for name, frame in tables.items()}
+    leading = shown['products'].iloc[0]
+    st.write(f"当前销售额最高的商品编码为 **{leading['商品编码']}**，"
+             f"销售额 **£{leading['销售额（英镑）']:,.2f}**。可在商品排行中查看数量和原始名称。")
     trend, product, region, timing, customers = st.tabs(['销售趋势', '商品排行', '国家分布', '购买时段', '客户消费'])
     with trend:
         chart = px.line(shown['monthly'], x='月份', y='销售额（英镑）', markers=True)
@@ -168,6 +171,10 @@ def render(root):
             chart.update_traces(hovertemplate='消费金额：%{x} 英镑<br>客户数：%{y}<extra></extra>')
             _chart(chart)
             st.dataframe(spend.head(100), hide_index=True, width='stretch')
-    st.download_button('下载当前筛选的分析表',
+    st.download_button('导出当前经营分析',
                        export_analysis(tables, stats, data['metadata']['dataset_id'], start, end, countries),
-                       file_name='交易分析.zip', mime='application/zip')
+                       file_name='交易分析.zip', mime='application/zip', type='primary')
+    with st.expander('数据来源与统计口径'):
+        st.caption(f"数据版本 {data['metadata']['dataset_id'][:12]}")
+        st.write('商品销售额不含取消/退货候选和隔离记录，不代表扣除全部退款后的净收入。'
+                 '可识别客户和复购占比不含客户编号缺失的交易。首尾月份可能不完整。')

@@ -9,6 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import joblib
+import pandas as pd
 
 from .rfm_presentation import display_rfm
 
@@ -74,6 +75,47 @@ def persist_clustering(result, context, root):
             db.execute('INSERT INTO cluster_runs VALUES (?,?,?,?)',
                        (run_id, metadata['dataset_id'], metadata['trained_at'], encoded))
     return {**metadata, 'artifact_dir': str(folder)}
+
+
+def latest_clustering(root, dataset_id):
+    """恢复本项目完整的展示报告，不反序列化模型，也不触发训练。"""
+    candidates = []
+    for path in (Path(root) / 'artifacts' / 'clustering').glob('*/metadata.json'):
+        try:
+            metadata = json.loads(path.read_text(encoding='utf-8'))
+            if metadata['dataset_id'] == dataset_id:
+                candidates.append((metadata['trained_at'], path.parent, metadata))
+        except (ValueError, KeyError, TypeError, OSError):
+            continue
+    for _, folder, metadata in sorted(candidates, key=lambda row: str(row[0]), reverse=True):
+        try:
+            required = ['reference_date', 'window_days', 'requested_k', 'selected_k', 'recommended_k',
+                        'pca_explained_variance_ratio', 'effective_features', 'features',
+                        'silhouette_sample_size', 'random_state', 'n_init', 'cohort_customers']
+            if not all(key in metadata for key in required) or not (folder / 'model.joblib').is_file():
+                continue
+            pd.Timestamp(metadata['reference_date'])
+            if metadata['window_days'] not in (None, 90, 180) or metadata['requested_k'] not in (None, *range(2, 9)):
+                continue
+            customers = pd.read_csv(folder / 'customers.csv', dtype={'CustomerID': str, 'MonetaryCents': str})
+            customers['LastPurchase'] = pd.to_datetime(customers.LastPurchase, errors='raise')
+            customers['MonetaryCents'] = customers.MonetaryCents.map(int)
+            profile = pd.read_csv(folder / 'profile.csv')
+            scores = pd.read_csv(folder / 'scores.csv')
+            # Validate all display/export schemas before publishing a saved result to the UI.
+            display_members(customers)
+            display_profile(profile)
+            display_scores(scores)
+            if (len(customers) != metadata['cohort_customers'] or customers.empty
+                    or customers.CustomerID.isna().any() or customers.CustomerID.duplicated().any()
+                    or customers.Cluster.nunique() != metadata['selected_k']
+                    or not scores.k.eq(metadata['selected_k']).any()):
+                continue
+            context = {**metadata, 'run_id': folder.name, 'artifact_dir': str(folder)}
+            return {'customers': customers, 'profile': profile, 'scores': scores, 'metadata': metadata}, context
+        except (ValueError, TypeError, KeyError, AttributeError, OSError, OverflowError):
+            continue
+    return None
 
 
 def export_clustering(result, context, groups=None, customer_search=''):

@@ -14,9 +14,9 @@ APP = Path(__file__).resolve().parents[1] / 'app.py'
 def test_sales_page_empty_workspace_has_import_guidance(tmp_path, monkeypatch):
     monkeypatch.setenv('RETAIL_DATA_ROOT', str(tmp_path))
     app = AppTest.from_file(str(APP)).run()
-    app.sidebar.radio(key='module').set_value('交易统计与可视化').run()
+    app.sidebar.radio(key='module').set_value('经营分析').run()
     assert not app.exception
-    assert app.title[0].value == '交易统计与可视化'
+    assert app.title[0].value == '销售与交易'
     assert any('导入' in message.value for message in app.info)
 
 
@@ -26,13 +26,13 @@ def test_sales_page_filters_and_exports_current_scope(tmp_path, monkeypatch):
     prepare_file(source_file(tmp_path), root=tmp_path)
     monkeypatch.setenv('RETAIL_DATA_ROOT', str(tmp_path))
     app = AppTest.from_file(str(APP)).run()
-    app.sidebar.radio(key='module').set_value('交易统计与可视化').run()
+    app.sidebar.radio(key='module').set_value('经营分析').run()
     assert not app.exception
     assert app.metric[0].value == '£6.10'
     assert app.metric[1].value == '2'
     assert app.metric[2].value == '1'
-    app.sidebar.radio(key='module').set_value('数据导入与清洗').run()
-    app.sidebar.radio(key='module').set_value('交易统计与可视化').run()
+    app.sidebar.radio(key='module').set_value('数据管理').run()
+    app.sidebar.radio(key='module').set_value('经营分析').run()
     assert not app.exception
     assert app.metric[0].value == '£6.10'
     app.button(key='sales_countries_clear').click().run()
@@ -50,7 +50,7 @@ def test_return_only_country_is_selectable_and_not_hidden(tmp_path, monkeypatch)
     prepare_file(source, root=tmp_path)
     monkeypatch.setenv('RETAIL_DATA_ROOT', str(tmp_path))
     app = AppTest.from_file(str(APP)).run()
-    app.sidebar.radio(key='module').set_value('交易统计与可视化').run()
+    app.sidebar.radio(key='module').set_value('经营分析').run()
     assert app.checkbox(key='sales_country_choice_France').label == '法国'
     assert any('-2.55' in message.value for message in app.caption)
     app.checkbox(key='sales_country_choice_UK').uncheck().run()
@@ -65,7 +65,7 @@ def test_separate_dates_include_end_day_and_reject_reversed_range(tmp_path, monk
     prepare_file(source_file(tmp_path), root=tmp_path)
     monkeypatch.setenv('RETAIL_DATA_ROOT', str(tmp_path))
     app = AppTest.from_file(str(APP)).run()
-    app.sidebar.radio(key='module').set_value('交易统计与可视化').run()
+    app.sidebar.radio(key='module').set_value('经营分析').run()
     assert app.date_input(key='sales_start').label == '开始日期'
     assert app.date_input(key='sales_end').label == '结束日期'
     app.date_input(key='sales_end').set_value(date(2011, 1, 1)).run()
@@ -86,7 +86,7 @@ def test_all_countries_are_chinese_search_keeps_selection_and_all_buttons_work(t
     prepare_file(source, root=tmp_path)
     monkeypatch.setenv('RETAIL_DATA_ROOT', str(tmp_path))
     app = AppTest.from_file(str(APP)).run()
-    app.sidebar.radio(key='module').set_value('交易统计与可视化').run()
+    app.sidebar.radio(key='module').set_value('经营分析').run()
     assert app.checkbox(key='sales_country_choice_UK').label == '英国'
     assert app.checkbox(key='sales_country_choice_France').label == '法国'
     app.text_input(key='sales_country_search').set_value('法国').run()
@@ -108,7 +108,7 @@ def test_charts_and_display_tables_have_chinese_labels(tmp_path, monkeypatch):
     prepare_file(source_file(tmp_path), root=tmp_path)
     monkeypatch.setenv('RETAIL_DATA_ROOT', str(tmp_path))
     app = AppTest.from_file(str(APP)).run()
-    app.sidebar.radio(key='module').set_value('交易统计与可视化').run()
+    app.sidebar.radio(key='module').set_value('经营分析').run()
     assert not app.exception
     charts = app.get('plotly_chart')
     assert len(charts) == 5
@@ -131,6 +131,6 @@ def test_previous_filter_session_is_upgraded_without_missing_state(tmp_path, mon
     app.session_state['sales_version'] = metadata['dataset_id']
     app.session_state['sales_dates'] = (date(2011, 1, 1), date(2011, 1, 3))
     app.session_state['sales_countries'] = ['UK']
-    app.sidebar.radio(key='module').set_value('交易统计与可视化').run()
+    app.sidebar.radio(key='module').set_value('经营分析').run()
     assert not app.exception
     assert app.metric[0].value == '£6.10'

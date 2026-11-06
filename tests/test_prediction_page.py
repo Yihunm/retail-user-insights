@@ -32,7 +32,7 @@ def open_prediction(tmp_path, monkeypatch, imported=False):
         prepare_file(prediction_source(tmp_path), root=tmp_path)
     monkeypatch.setenv('RETAIL_DATA_ROOT', str(tmp_path))
     app = AppTest.from_file(str(APP)).run(timeout=30)
-    app.sidebar.radio(key='module').set_value('复购与流失预测').run(timeout=30)
+    app.sidebar.radio(key='module').set_value('模型实验').run(timeout=30)
     return app
 
 
@@ -64,8 +64,8 @@ def test_prediction_training_inference_loading_and_version_invalidation(tmp_path
     assert not app.exception
     assert app.session_state['prediction_context']['run_id'] == run_id
     assert app.date_input(key='prediction_infer_date').value == date(2011, 10, 1)
-    app.sidebar.radio(key='module').set_value('数据导入与清洗').run()
-    app.sidebar.radio(key='module').set_value('复购与流失预测').run()
+    app.sidebar.radio(key='module').set_value('数据管理').run()
+    app.sidebar.radio(key='module').set_value('模型实验').run()
     assert not app.exception
     assert app.session_state['prediction_context']['run_id'] == run_id
     assert app.date_input(key='prediction_infer_date').value == date(2011, 10, 1)
@@ -89,3 +89,51 @@ def test_insufficient_history_reports_error_without_creating_model(tmp_path, mon
     assert not app.exception
     assert app.error
     assert not list((tmp_path / 'artifacts' / 'prediction').glob('*/metadata.json'))
+
+
+def test_business_page_loads_saved_model_filters_without_training_and_clears_changed_data(tmp_path, monkeypatch):
+    from retail_insights.preparation import prepare_file
+    from test_preparation import source_file
+
+    app = open_prediction(tmp_path, monkeypatch, imported=True)
+    next(button for button in app.button if button.label == '构建样本并训练').click().run(timeout=120)
+    run_id = app.session_state['prediction_context']['run_id']
+    app.sidebar.radio(key='module').set_value('复购与流失').run(timeout=60)
+    assert not app.exception
+    assert app.metric[0].value == '24'
+    assert not any(button.label == '构建样本并训练' for button in app.button)
+    app.text_input(key='prediction_customer_search').set_value('A00').run(timeout=30)
+    assert not app.exception
+    assert app.session_state['prediction_context']['run_id'] == run_id
+    assert app.dataframe[0].value['客户编号'].tolist() == ['A00']
+    app.selectbox(key='opportunity_result_filter').set_value('预计复购').run(timeout=30)
+    assert not app.exception
+    assert all(table.value['预测判定'].eq('预计复购').all() for table in app.dataframe)
+    assert len(list((tmp_path / 'artifacts' / 'prediction').glob('*/COMPLETE.json'))) == 1
+    # A fresh browser session restores the saved model and generates the current list directly.
+    app = AppTest.from_file(str(APP)).run(timeout=30)
+    app.sidebar.radio(key='module').set_value('复购与流失').run(timeout=60)
+    assert not app.exception
+    assert app.session_state['prediction_context']['run_id'] == run_id
+    assert app.metric[0].value == '24'
+    app.radio(key='opportunity_task').set_value('未购买风险').run(timeout=30)
+    assert not app.exception
+    assert len(app.dataframe) == 0
+    assert any(button.key == 'prediction_setup' for button in app.button)
+    app.button(key='prediction_setup').click().run(timeout=30)
+    assert app.selectbox(key='prediction_task').value == '未来60天未购买风险'
+    next(button for button in app.button if button.label == '构建样本并训练').click().run(timeout=120)
+    churn_id = app.session_state['prediction_context']['run_id']
+    app.sidebar.radio(key='module').set_value('复购与流失').run(timeout=60)
+    assert not app.exception
+    assert app.session_state['prediction_context']['task'] == 'churn'
+    assert app.session_state['opportunity_inference_key'][0] == churn_id
+    assert churn_id != run_id
+    assert app.metric[0].value == '24'
+    assert set(app.dataframe[0].value['预测判定']) <= {'高风险', '一般风险'}
+    assert len(list((tmp_path / 'artifacts' / 'prediction').glob('*/COMPLETE.json'))) == 2
+    prepare_file(source_file(tmp_path), root=tmp_path)
+    app.run(timeout=30)
+    assert not app.exception
+    assert 'prediction_context' not in app.session_state
+    assert 'prediction_inference' not in app.session_state

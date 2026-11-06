@@ -16,7 +16,7 @@ def open_rfm(tmp_path, monkeypatch, imported=True):
         prepare_file(source_file(tmp_path), root=tmp_path)
     monkeypatch.setenv('RETAIL_DATA_ROOT', str(tmp_path))
     app = AppTest.from_file(str(APP)).run(timeout=30)
-    app.sidebar.radio(key='module').set_value('RFM用户价值分析').run(timeout=30)
+    app.sidebar.radio(key='module').set_value('客户价值').run(timeout=30)
     return app
 
 
@@ -29,7 +29,7 @@ def test_rfm_no_data_guides_import(tmp_path, monkeypatch):
 def test_rfm_uses_identified_sales_and_shows_chinese_tables(tmp_path, monkeypatch):
     app = open_rfm(tmp_path, monkeypatch)
     assert not app.exception
-    assert app.title[0].value == 'RFM用户价值分析'
+    assert app.title[0].value == '客户价值'
     assert app.metric[0].value == '1'
     assert app.metric[1].value == '£5.10'
     assert app.date_input(key='rfm_reference').value == date(2011, 1, 3)
@@ -45,8 +45,8 @@ def test_rfm_customer_filter_empty_segments_and_page_switch_restore(tmp_path, mo
     app.text_input(key='rfm_customer_search').set_value('123').run()
     assert app.metric[0].value == '1'
     app.selectbox(key='rfm_window').set_value('最近90天').run()
-    app.sidebar.radio(key='module').set_value('数据导入与清洗').run()
-    app.sidebar.radio(key='module').set_value('RFM用户价值分析').run()
+    app.sidebar.radio(key='module').set_value('数据管理').run()
+    app.sidebar.radio(key='module').set_value('客户价值').run()
     assert not app.exception
     assert app.text_input(key='rfm_customer_search').value == '123'
     assert app.selectbox(key='rfm_window').value == '最近90天'
@@ -72,5 +72,5 @@ def test_customer_filter_does_not_rescore_against_smaller_population(tmp_path, m
     app = open_rfm(tmp_path, monkeypatch, imported=False)
     app.text_input(key='rfm_customer_search').set_value('123').run()
     assert not app.exception
-    details = next(table.value for table in app.dataframe if '客户编号' in table.value.columns)
+    details = next(table.value for table in app.dataframe if 'M评分' in table.value.columns)
     assert details['M评分'].tolist() == [5]  # Would become 1 if recomputed after searching.

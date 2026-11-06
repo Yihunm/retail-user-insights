@@ -11,6 +11,7 @@ from .preparation import load_dataset
 from .prediction_presentation import (TASK_LABELS, MODEL_LABELS, STRATEGY_LABELS, FEATURE_LABELS,
     display_metrics, display_predictions, run_prediction, saved_records, load_experiment,
     export_customer_predictions)
+from .ui_shared import page_header, import_guidance, chart
 
 
 @st.cache_data(show_spinner=False, max_entries=2)
@@ -22,6 +23,8 @@ def _set_current(result, context, latest):
     st.session_state['prediction_result'] = result
     st.session_state['prediction_context'] = context
     st.session_state.pop('prediction_inference', None)
+    st.session_state.pop('opportunity_inference_key', None)
+    st.session_state['opportunity_result_filter'] = '全部客户'
     st.session_state['prediction_infer_date'] = latest
     st.session_state['prediction_infer_date_memory'] = latest
     st.session_state['prediction_customer_search'] = ''
@@ -29,16 +32,17 @@ def _set_current(result, context, latest):
 
 
 def _chart(figure):
-    figure.update_layout(font={'family': 'Microsoft YaHei, PingFang SC, sans-serif'})
-    st.plotly_chart(figure, width='stretch', config={'displayModeBar': False})
+    chart(figure)
 
 
-def render(root):
-    st.title('复购与流失预测')
-    st.caption('过去90天交易特征 → 未来30天复购 / 未来60天未购买风险。仅预测已有购买记录的客户。')
+def render(root, mode='customers'):
+    if mode == 'customers':
+        from .ui_opportunities import render as render_customers
+        return render_customers(root)
+    page_header('进阶工具', '模型实验', '在这里更新预测模型、比较算法和核对历史效果。日常查看名单，请使用“复购与流失”。')
     pointer_path = root / 'data' / 'active.json'
     if not pointer_path.exists():
-        st.info('请先在“数据导入与清洗”中导入数据。')
+        import_guidance()
         return
     try:
         pointer = pointer_path.read_text(encoding='utf-8')

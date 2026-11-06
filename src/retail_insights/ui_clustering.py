@@ -12,6 +12,7 @@ from .clustering_presentation import (display_members, display_profile, display_
 from .preparation import load_dataset
 from .rfm import build_rfm
 from .ui_shared import page_header, import_guidance, chart
+from .ui_theme import PALETTE
 
 WINDOWS = {'全部历史': None, '最近90天': 90, '最近180天': 180}
 K_OPTIONS = {'自动推荐': None, **{f'{k}组': k for k in range(2, 9)}}
@@ -129,7 +130,7 @@ def render(root):
         ['群体画像', '客户名单', '特征分布', '分群效果', '方法与版本'])
     profile = display_profile(result['profile'])
     scores = display_scores(result['scores'])
-    colors = {group_name(group): px.colors.qualitative.Safe[index]
+    colors = {group_name(group): PALETTE[index]
               for index, group in enumerate(sorted(result['customers'].Cluster.unique()))}
     with comparison:
         st.caption(f"当前轮廓系数：{'无法评价' if selected_score is None else f'{selected_score:.3f}'}；"

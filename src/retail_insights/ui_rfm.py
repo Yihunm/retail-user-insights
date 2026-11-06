@@ -10,10 +10,10 @@ from .preparation import load_dataset
 from .rfm import build_rfm, rfm_profile, rfm_rules
 from .rfm_presentation import display_rfm, display_profile, export_rfm
 from .ui_shared import page_header, import_guidance, chart
+from .ui_theme import SEGMENT_COLORS
 
 WINDOWS = {'全部历史': None, '最近90天': 90, '最近180天': 180}
-COLORS = {'高价值客户': '#246B88', '流失风险客户': '#B35B38', '沉睡客户': '#738395',
-          '潜力客户': '#378568', '一般客户': '#668AC4'}
+COLORS = SEGMENT_COLORS
 
 
 @st.cache_data(show_spinner=False, max_entries=2)
